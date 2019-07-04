@@ -1,0 +1,152 @@
+version: '3'
+services:
+  mysql_gerrit:
+    image: mysql:5.7
+    container_name: mysql_gerrit
+    restart: always
+    privileged: true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./mysql/gerrit:/var/lib/mysql
+    command: ['--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci', '--explicit_defaults_for_timestamp=1']
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=reviewdb
+      - MYSQL_USER=gerrit
+      - MYSQL_PASSWORD=GERRIT_PASS
+
+  mysql_sonar:
+    image: mysql:5.7
+    container_name: mysql_sonar
+    restart: always
+    privileged: true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./mysql/sonar:/var/lib/mysql
+    command: ['--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci', '--explicit_defaults_for_timestamp=1']
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=sonar
+      - MYSQL_USER=sonar
+      - MYSQL_PASSWORD=SONAR_PASS
+
+  gerrit:
+    image: openfrontier/gerrit:2.15.14
+    container_name: gerrit
+    restart: always
+    privileged: true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./gerrit/review_site:/var/gerrit/review_site
+      - ./gerrit/.ssh:/var/gerrit/.ssh
+    environment:
+      - SMTP_SERVER=smtp.gmail.com
+      - SMTP_SERVER_PORT=465
+      - SMTP_ENCRYPTION=SSL
+      - SMTP_USER=baosong818@gmail.com
+      - SMTP_PASS=XXXXXXX
+      - SMTP_CONNECT_TIMEOUT=10sec
+      - SMTP_FROM=Gerrit<baosong818@gmail.com>
+      - DATABASE_TYPE=mysql
+      - DATABASE_HOSTNAME=mysql_gerrit
+      - DATABASE_DATABASE=reviewdb
+      - DATABASE_USERNAME=gerrit
+      - DATABASE_PASSWORD=GERRIT_PASS
+      - AUTH_TYPE=HTTP
+      - "GERRIT_INIT_ARGS=--install-all-plugins"
+    external_links:
+      - mysql_gerrit:mysql_gerrit
+      - gitlab:gitlab
+    depends_on:
+      - mysql_gerrit
+      - gitlab
+    ports:
+      - 29418:29418
+
+  gitlab:
+    container_name: gitlab
+    image: gitlab/gitlab-ce:latest
+    restart: always
+    privileged: true 
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://gitlab.demo.com'
+        gitlab_rails['time_zone'] = 'Asia/Shanghai'
+        gitlab_rails['smtp_enable'] = true
+        gitlab_rails['smtp_address'] = "smtp.gmail.com"
+        gitlab_rails['smtp_port'] = 465
+        gitlab_rails['smtp_user_name'] = "baosong818@gmail.com"
+        gitlab_rails['smtp_password'] = "XXXXXXXX"
+        gitlab_rails['smtp_domain'] = "smtp.gmail.com"
+        gitlab_rails['smtp_authentication'] = "login"
+        gitlab_rails['smtp_enable_starttls_auto'] = true
+        gitlab_rails['smtp_tls'] = true
+        gitlab_rails['gitlab_email_enabled'] = true
+        gitlab_rails['gitlab_email_from'] = 'baosong818@gmail.com'
+        gitlab_rails['gitlab_email_display_name'] = 'noreply@gmail.com'
+    ports:
+      - "65522:22"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - "./gitlab/config:/etc/gitlab"
+      - "./gitlab/logs:/var/log/gitlab"
+      - "./gitlab/data:/var/opt/gitlab"
+
+  sonarqube:
+    image: sonarqube
+    container_name: sonarqube
+    restart: always
+    privileged: true
+    external_links:
+      - mysql_sonar:mysql_sonar
+    depends_on:
+      - mysql_sonar
+    environment:
+      - SONARQUBE_JDBC_USERNAME=sonar
+      - SONARQUBE_JDBC_PASSWORD=SONAR_PASS
+      - SONARQUBE_JDBC_URL=jdbc:mysql://mysql_sonar:3306/sonar?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true&useConfigs=maxPerformance&useSSL=false
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: jenkins
+    restart: always
+    privileged: true
+    external_links:
+      - gerrit:gerrit
+      - gitlab:gitlab
+      - sonarqube:sonarqube
+    depends_on:
+      - gerrit
+      - gitlab
+      - sonarqube
+    ports:
+      - 50000:50000
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./jenkins:/var/jenkins_home
+    environment:
+      - JAVA_OPTS=-Duser.timezone=Asia/Shanghai
+
+  nginx:
+    image: nginx
+    container_name: nginx
+    restart: always
+    privileged: true
+    external_links:
+      - gerrit:gerrit
+      - jenkins:jenkins
+      - gitlab:gitlab
+      - sonarqube:sonarqube
+    depends_on:
+      - gerrit
+      - jenkins
+      - gitlab
+      - sonarqube
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./nginx/passwords:/etc/nginx/passwords
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - 80:80
