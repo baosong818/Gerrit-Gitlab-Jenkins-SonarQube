@@ -2,6 +2,15 @@
 rpm -ivh https://mirrors.ustc.edu.cn/epel/7/x86_64/Packages/e/epel-release-7-11.noarch.rpm 
 yum install -y expect httpd-tools
 
+curl -L "https://github.com/docker/compose/releases/download/1.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+
+yum install -y docker
+systemctl enable docker
+systemctl start docker
+
+echo "vm.max_map_count = 655360" >> /etc/sysctl.conf
+
 echo `pwd`
 docker-compose down
 
