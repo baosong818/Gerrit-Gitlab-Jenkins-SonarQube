@@ -93,7 +93,7 @@ services:
       - "./gitlab/data:/var/opt/gitlab"
 
   sonarqube:
-    image: sonarqube
+    image: sonarqube:7.8-community
     container_name: sonarqube
     restart: always
     privileged: true
